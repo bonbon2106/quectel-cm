@@ -320,6 +320,9 @@ __main_loop:
         return 0;
     }
 
+    if (request_ops->requestGetIMEI)
+        request_ops->requestGetIMEI();
+
     if (request_ops->requestBaseBandVersion)
         request_ops->requestBaseBandVersion(profile);
 

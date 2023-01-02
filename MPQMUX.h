@@ -892,7 +892,7 @@ typedef struct _QMIWDS_GET_DATA_BEARER_RESP_MSG
 #define QMIDMS_GET_BAND_CAP_REQ               0x0045
 #define QMIDMS_GET_BAND_CAP_RESP              0x0045
 
-#if 0
+#if 1
 typedef struct _QMIDMS_GET_DEVICE_MFR_REQ_MSG
 {
    USHORT Type;             // QMUX type 0x0003
@@ -938,6 +938,14 @@ typedef struct _QMIDMS_GET_DEVICE_MODEL_ID_RESP_MSG
    USHORT TLV2Length;       // length of the modem id string
    UCHAR  DeviceModelID;    // device model id
 } QMIDMS_GET_DEVICE_MODEL_ID_RESP_MSG, *PQMIDMS_GET_DEVICE_MODEL_ID_RESP_MSG;
+
+typedef struct _DEVICE_MODEL_ID
+{
+   UCHAR  TLVType;
+   USHORT TLVLength;
+   UCHAR  DeviceModelID;
+} __attribute__ ((packed)) DEVICE_MODEL_ID, *PDEVICE_MODEL_ID;
+
 #endif
 
 typedef struct _QMIDMS_GET_DEVICE_REV_ID_REQ_MSG
@@ -1014,7 +1022,7 @@ typedef struct _QMIDMS_UIM_GET_IMSI_RESP_MSG
    UCHAR IMSI;
 } __attribute__ ((packed)) QMIDMS_UIM_GET_IMSI_RESP_MSG, *PQMIDMS_UIM_GET_IMSI_RESP_MSG;
 
-#if 0
+#if 1
 typedef struct _QMIDMS_GET_DEVICE_SERIAL_NUMBERS_REQ_MSG
 {
    USHORT Type;             // QMUX type 0x0007
@@ -1061,16 +1069,23 @@ typedef struct _QMIDMS_GET_BAND_CAP_RESP_MSG
    UCHAR  TLVType;          // 0x02 - result code
    USHORT TLVLength;        // 4
    USHORT QMUXResult;       // QMI_RESULT_SUCCESS
-                            // QMI_RESULT_FAILURE
+                             //QMI_RESULT_FAILURE
    USHORT QMUXError;        // QMI_ERR_NONE
-                            // QMI_ERR_INTERNAL
-                            // QMI_ERR_MALFORMED_MSG
-                            // QMI_ERR_NO_MEMORY
+                             //QMI_ERR_INTERNAL
+                             //QMI_ERR_MALFORMED_MSG
+                             //QMI_ERR_NO_MEMORY
 
    UCHAR  TLV2Type;         // 0x01
    USHORT TLV2Length;       // 2
    ULONG64 BandCap;
 } QMIDMS_GET_BAND_CAP_RESP_MSG, *PQMIDMS_GET_BAND_CAP_RESP;
+
+typedef struct _QMIDMS_GET_BAND_CAP
+{
+   UCHAR  TLVType;         // 0x01
+   USHORT TLVLength;       // 8
+   ULONG64 BandCap;
+} QMIDMS_GET_BAND_CAP, *PQMIDMS_GET_BAND_CAP;
 
 typedef struct _QMIDMS_GET_DEVICE_CAP_REQ_MSG
 {
@@ -2738,7 +2753,7 @@ typedef struct {
   uint16_t tac;
 } __attribute__ ((packed)) NR5G_SYSTEM_INFO, *PNR5G_SYSTEM_INFO;
 
-#if 0
+#if 1
 typedef struct _QMINAS_SERVING_SYSTEM_IND_MSG
 {
    USHORT Type;
@@ -2996,6 +3011,9 @@ typedef struct _QMINAS_GET_RF_BAND_INFO_REQ_MSG
 
 typedef struct _QMINASRF_BAND_INFO
 {
+   UCHAR  TLVType;
+   USHORT TLVLength;
+   UCHAR  NumInstances;
    UCHAR  RadioIf;
    USHORT ActiveBand;
    USHORT ActiveChannel;

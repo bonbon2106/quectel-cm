@@ -151,11 +151,10 @@ static int ql_raw_ip_mode_check(const char *ifname, uint32_t ip) {
 static void* udhcpc_thread_function(void* arg) {
     FILE * udhcpc_fp;
     char *udhcpc_cmd = (char *)arg;
-
     if (udhcpc_cmd == NULL)
         return NULL;
 
-    dbg_time("%s", udhcpc_cmd);
+    dbg_time("1.%s", udhcpc_cmd);
     udhcpc_fp = popen(udhcpc_cmd, "r");
     free(udhcpc_cmd);
     if (udhcpc_fp) {
@@ -165,7 +164,8 @@ static void* udhcpc_thread_function(void* arg) {
         while((fgets(buf, sizeof(buf)-1, udhcpc_fp)) != NULL) {
             if ((strlen(buf) > 1) && (buf[strlen(buf) - 1] == '\n'))
                 buf[strlen(buf) - 1] = '\0';
-            dbg_time("%s", buf);
+            dbg_time("1.%s", buf);
+            system("touch /tmp/lteconnected");
         }
 
         pclose(udhcpc_fp);

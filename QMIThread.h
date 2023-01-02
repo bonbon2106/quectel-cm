@@ -6,9 +6,9 @@
 #define CONFIG_SIM
 #define CONFIG_APN
 #define CONFIG_VERSION
-// #define CONFIG_SIGNALINFO
+#define CONFIG_SIGNALINFO
 #define CONFIG_DEFAULT_PDP 1
-//#define CONFIG_IMSI_ICCID
+#define CONFIG_IMSI_ICCID
 #define QUECTEL_UL_DATA_AGG
 //#define QUECTEL_QMI_MERGE
 
@@ -293,6 +293,7 @@ struct request_ops {
     int (*requestGetSignalInfo)(void);
     int (*requestGetICCID)(void);
     int (*requestGetIMSI)(void);
+    int (*requestGetIMEI)(void);
 };
 extern const struct request_ops qmi_request_ops;
 extern const struct request_ops mbim_request_ops;

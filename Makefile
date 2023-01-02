@@ -3,7 +3,7 @@ CROSS-COMPILE:=$(CROSS_COMPILE)
 endif
 #CROSS-COMPILE:=/workspace/buildroot/buildroot-qemu_mips_malta_defconfig/output/host/usr/bin/mips-buildroot-linux-uclibc-
 #CROSS-COMPILE:=/workspace/buildroot/buildroot-qemu_arm_vexpress_defconfig/output/host/usr/bin/arm-buildroot-linux-uclibcgnueabi-
-#CROSS-COMPILE:=/workspace/buildroot-git/qemu_mips64_malta/output/host/usr/bin/mips-gnu-linux-
+CROSS-COMPILE:=/home/thangnn/Projects/Skylight/cv25/tools/linaro-aarch64-2018.08-gcc8.2/bin/aarch64-linux-gnu-
 ifeq ($(CC),cc)
 CC:=$(CROSS-COMPILE)gcc
 endif

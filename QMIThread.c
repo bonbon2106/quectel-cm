@@ -14,6 +14,7 @@
   ---------------------------------------------------------------------------
 ******************************************************************************/
 #include "QMIThread.h"
+#include "contries_code.h"
 #ifndef MIN
 #define MIN(a, b)	((a) < (b)? (a): (b))
 #endif
@@ -71,6 +72,7 @@ PQMI_TLV_HDR GetTLV (PQCQMUX_MSG_HDR pQMUXMsgHdr, int TLVType) {
 
     while (Length >= sizeof(QMI_TLV_HDR)) {
         TLVFind++;
+        //printf("GetTLV: TLVType=0x%X => TLVFind=%d, pTLVHdr->TLVType=0x%X, pTLVHdr->TLVLength=%d\n", TLVType, TLVFind, pTLVHdr->TLVType, pTLVHdr->TLVLength);
         if (TLVType > 0x1000) {
             if ((TLVFind + 0x1000) == TLVType)
                 return pTLVHdr;
@@ -849,6 +851,7 @@ static int requestGetSIMStatus(SIM_Status *pSIMStatus) { //RIL_REQUEST_GET_SIM_S
     PQCQMIMSG pResponse;
     PQMUX_MSG pMUXMsg;
     int err;
+    char shell_cmd[128];
     const char * SIM_Status_String[] = {
         "SIM_ABSENT",
         "SIM_NOT_READY",
@@ -954,8 +957,9 @@ static int requestGetSIMStatus(SIM_Status *pSIMStatus) { //RIL_REQUEST_GET_SIM_S
             *pSIMStatus = SIM_ABSENT;
         }
     }
-    dbg_time("%s SIMStatus: %s", __func__, SIM_Status_String[*pSIMStatus]);
-
+    dbg_time("%s SIMStatus.1.: %s", __func__, SIM_Status_String[*pSIMStatus]);
+    snprintf(shell_cmd, sizeof(shell_cmd), "echo %s > /tmp/lteSim", SIM_Status_String[*pSIMStatus]);
+            system(shell_cmd);
     free(pResponse);
 
     return 0;
@@ -1621,6 +1625,12 @@ static int requestRegistrationState2(UCHAR *pPSAttachedState) {
 
     dbg_time("%s MCC: %d, MNC: %d, PS: %s, DataCap: %s", __func__,
         MobileCountryCode, MobileNetworkCode, (*pPSAttachedState == 1) ? "Attached" : "Detached" , pDataCapStr);
+    for(int i = 0; i < sizeof(PVN_ISPNAME); i++){
+      if((MobileCountryCode * 100 + MobileNetworkCode) == PVN_ISPNAME[i].code){
+        dbg_time("%s: SIM-Card MobileCountryName[%s], MobileISPName[%s]",__func__, PVN_ISPNAME[i].country, PVN_ISPNAME[i].isp_name);
+        break;
+      }
+    }
 
     free(pResponse);
 
@@ -2023,12 +2033,112 @@ static int requestGetProfile(PROFILE_T *profile) {
 }
 #endif
 
+
+static void map_active_band (USHORT activeBand)
+{
+    char shell_cmd[128];
+    if (activeBand <= 19) {
+        snprintf(shell_cmd, sizeof(shell_cmd), "echo CDMA:%d > /tmp/lteMode", activeBand);
+        system(shell_cmd);
+        return;
+    }
+    if ((activeBand <= 39) || ((activeBand > 48) && (activeBand <= 79))) {
+        return;
+    }
+    // #  0 to 19 => CDMA BC_x
+    // # 20 to 39 => Reserved
+    // 40 => 'GSM 450',
+    // 41 => 'GSM 480',
+    // 42 => 'GSM 750',
+    // 43 => 'GSM 850',
+    // 44 => 'GSM 900 (Extended)',
+    // 45 => 'GSM 900 (Primary)',
+    // 46 => 'GSM 900 (Railways)',
+    // 47 => 'GSM 1800',
+    // 48 => 'GSM 1900',
+    // # 49 to 79 => Reserved
+    // 80 => 'WCDMA 2100',
+    // 81 => 'WCDMA PCS 1900',
+    // 82 => 'WCDMA DCS 1800',
+    // 83 => 'WCDMA 1700 (U.S.)',
+    // 84 => 'WCDMA 850',
+    // 85 => 'WCDMA 800',
+    // 86 => 'WCDMA 2600',
+    // 87 => 'WCDMA 900',
+    // 88 => 'WCDMA 1700 (Japan)',
+    // 89 => 'reserved',
+    // 90 => 'WCDMA 1500 (Japan)',
+    // 91 => 'WCDMA 850 (Japan)',
+    //if (activeBand == 47) {
+        //nprintf(shell_cmd, sizeof(shell_cmd), "echo GSM1800:%d > /tmp/lteMode", activeBand);
+        //system(shell_cmd);
+        //return;
+    //}
+    
+    if ((activeBand > 119) && (activeBand <= 151)) {
+        USHORT band = activeBand - 119;
+        if (activeBand > 133) band += 2; // there's a hole for band 15 and 16...
+        if (activeBand > 134) band += 15; // and one between 17 and 33
+        if (activeBand > 142) band -= 23; // then we go back to 18 after 40...
+        if (activeBand > 146) band += 2; // and have a whole for band  22 and 23
+        if (activeBand > 148) band += 15; // and up to 41 again after 25..
+        if (band >= 34 && band <= 53) {
+            snprintf(shell_cmd, sizeof(shell_cmd), "echo 'Mode: TDD LTE; Band: LTE BAND %d' > /tmp/lteMode", band);
+        } else if (band == 29 || band == 32 || band == 67 || band == 69 || band == 75 || band == 76){
+            snprintf(shell_cmd, sizeof(shell_cmd), "echo 'Mode: SDL LTE; Band: LTE BAND %d' > /tmp/lteMode", band);
+        } else {
+            snprintf(shell_cmd, sizeof(shell_cmd), "echo 'Mode: FDD LTE; Band: LTE BAND %d' > /tmp/lteMode", band);
+        }
+        system(shell_cmd);
+        return;
+    }
+}
+
 #ifdef CONFIG_SIGNALINFO
+static int requestGetBandCap(void)
+{
+    PQCQMIMSG pRequest;
+    PQCQMIMSG pResponse;
+    PQMUX_MSG pMUXMsg;
+    //char shell_cmd[128];
+    int err;
+    
+    pRequest = ComposeQMUXMsg(QMUX_TYPE_DMS, QMIDMS_GET_BAND_CAP_REQ, NULL, NULL);
+    err = QmiThreadSendQMI(pRequest, &pResponse);
+    qmi_rsp_check_and_return();
+    PQMIDMS_GET_BAND_CAP ptlv1 = (PQMIDMS_GET_BAND_CAP)GetTLV(&pResponse->MUXMsg.QMUXMsgHdr, 0x01);
+    free(pResponse);
+    dbg_time("%s BandCap: 0x%lld\n", __func__, ptlv1->BandCap);
+    return 0;
+}
+
+static int requestGetRfBandInfo(void)
+{
+    PQCQMIMSG pRequest;
+    PQCQMIMSG pResponse;
+    PQMUX_MSG pMUXMsg;
+    int err;
+    
+    //printf("QMINAS_GET_RF_BAND_INFO_REQ...\n");
+    pRequest = ComposeQMUXMsg(QMUX_TYPE_NAS, QMINAS_GET_RF_BAND_INFO_REQ, NULL, NULL);
+    err = QmiThreadSendQMI(pRequest, &pResponse);
+    qmi_rsp_check_and_return();
+    PQMINASRF_BAND_INFO ptlv = (PQMINASRF_BAND_INFO)GetTLV(&pResponse->MUXMsg.QMUXMsgHdr, 0x01);
+
+    dbg_time("%s: NumInstances=%d, RadioIf=%d (%s), ActiveBand=%d, ActiveChannel=%d\n", 
+              __func__, ptlv->NumInstances, ptlv->RadioIf, Radio_If[ptlv->RadioIf], ptlv->ActiveBand, ptlv->ActiveChannel);
+    map_active_band(ptlv->ActiveBand);
+    free(pResponse);
+    
+    requestGetBandCap();
+    return 0;
+}
 static int requestGetSignalInfo(void)
 {
     PQCQMIMSG pRequest;
     PQCQMIMSG pResponse;
     PQMUX_MSG pMUXMsg;
+    char shell_cmd[128];
     int err;
 
     pRequest = ComposeQMUXMsg(QMUX_TYPE_NAS, QMINAS_GET_SIG_INFO_REQ, NULL, NULL);
@@ -2082,6 +2192,8 @@ static int requestGetSignalInfo(void)
         {
             dbg_time("%s LTE: RSSI %d dBm, RSRQ %d dB, RSRP %d dBm, SNR %.1lf dB", __func__,
                 ptlv->rssi, ptlv->rsrq, ptlv->rsrp, (0.1) * (double)ptlv->snr);
+            snprintf(shell_cmd, sizeof(shell_cmd), "echo %d > /tmp/lteRssi", ptlv->rssi);
+            system(shell_cmd);
         }
     }
 
@@ -2113,11 +2225,62 @@ static int requestGetSignalInfo(void)
             dbg_time("%s 5G_SA: NR5G_RSRQ %d dB", __func__, ptlv->nr5g_rsrq);
         }
     }
-
     free(pResponse);
+    
+    requestGetRfBandInfo();
+    
     return 0;
 }
 #endif
+
+static int requestDeviceSerialNumber(void) { // GET IMEI
+    PQCQMIMSG pRequest;
+    PQCQMIMSG pResponse;
+    PQMUX_MSG pMUXMsg;
+    PQCTLV_DEVICE_SERIAL_NUMBER serialNumber;
+    int err;
+    char shell_cmd[128];
+    
+    pRequest = ComposeQMUXMsg(QMUX_TYPE_DMS, QMIDMS_GET_DEVICE_SERIAL_NUMBERS_REQ, NULL, NULL);
+    err = QmiThreadSendQMI(pRequest, &pResponse);
+    qmi_rsp_check_and_return();
+    serialNumber = (PQCTLV_DEVICE_SERIAL_NUMBER)GetTLV(&pResponse->MUXMsg.QMUXMsgHdr, QCTLV_TYPE_SER_NUM_IMEI);
+    if (serialNumber && le16_to_cpu(serialNumber->TLVLength))
+    {
+        char *DeviceSerialNumber = strndup((const char *)(&serialNumber->SerialNumberString), le16_to_cpu(serialNumber->TLVLength));
+        dbg_time("%s %s", __func__, DeviceSerialNumber);
+        snprintf(shell_cmd, sizeof(shell_cmd), "echo %s > /tmp/lteIMEI", DeviceSerialNumber);
+        system(shell_cmd);
+        free(DeviceSerialNumber);
+    }
+    free(pResponse);
+    return 0;
+}
+static int requestDeviceModelID(void) { // GET Device Model ID
+    PQCQMIMSG pRequest;
+    PQCQMIMSG pResponse;
+    PQMUX_MSG pMUXMsg;
+    PDEVICE_MODEL_ID modelID;
+    int err;
+    char shell_cmd[128];
+    
+    pRequest = ComposeQMUXMsg(QMUX_TYPE_DMS, QMIDMS_GET_DEVICE_MODEL_ID_REQ, NULL, NULL);
+    err = QmiThreadSendQMI(pRequest, &pResponse);
+    qmi_rsp_check_and_return();
+    modelID = (PDEVICE_MODEL_ID)GetTLV(&pResponse->MUXMsg.QMUXMsgHdr, 0x01);
+    if (modelID && le16_to_cpu(modelID->TLVLength))
+    {
+        char *model_ = strndup((const char *)(&modelID->DeviceModelID), le16_to_cpu(modelID->TLVLength));
+        dbg_time("%s %s", __func__, model_);
+        snprintf(shell_cmd, sizeof(shell_cmd), "echo %s > /tmp/lteDevModel", model_);
+        system(shell_cmd);
+        free(model_);
+    }
+    free(pResponse);
+    return 0;
+}
+
+
 
 #ifdef CONFIG_VERSION
 static int requestBaseBandVersion(PROFILE_T *profile) {
@@ -2126,7 +2289,8 @@ static int requestBaseBandVersion(PROFILE_T *profile) {
     PQMUX_MSG pMUXMsg;
     PDEVICE_REV_ID revId;
     int err;
-
+    char shell_cmd[128];
+    
     pRequest = ComposeQMUXMsg(QMUX_TYPE_DMS, QMIDMS_GET_DEVICE_REV_ID_REQ, NULL, NULL);
     err = QmiThreadSendQMI(pRequest, &pResponse);
     qmi_rsp_check_and_return();
@@ -2137,11 +2301,16 @@ static int requestBaseBandVersion(PROFILE_T *profile) {
     {
         char *DeviceRevisionID = strndup((const char *)(&revId->RevisionID), le16_to_cpu(revId->TLVLength));
         dbg_time("%s %s", __func__, DeviceRevisionID);
+        snprintf(shell_cmd, sizeof(shell_cmd), "echo %s > /tmp/lteVersion", DeviceRevisionID);
+            system(shell_cmd);
         strncpy(profile->BaseBandVersion, DeviceRevisionID, sizeof(profile->BaseBandVersion));
         free(DeviceRevisionID);
     }
-
+    
     free(pResponse);
+    
+    requestDeviceModelID();
+    
     return 0;
 }
 #endif
@@ -2228,4 +2397,5 @@ const struct request_ops qmi_request_ops = {
     .requestGetSignalInfo = requestGetSignalInfo,
 #endif
     .requestSetLoopBackState = requestSetLoopBackState,
+    .requestGetIMEI = requestDeviceSerialNumber,
 };

@@ -427,6 +427,8 @@ __QmiWwanThread_quit:
     qmidevice_send_event_to_main(RIL_INDICATE_DEVICE_DISCONNECTED);
     QmiThreadRecvQMI(NULL); //main thread may pending on QmiThreadSendQMI()
     dbg_time("%s exit", __func__);
+    system("rm -rf /tmp/lte*");
+    system("touch /tmp/lteDisconnected");
     pthread_exit(NULL);
     return NULL;
 }
