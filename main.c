@@ -19,10 +19,12 @@
 #include <sys/utsname.h>
 #include <sys/time.h>
 #include <dirent.h>
-
+#include <libxml/parser.h>
+#include <libxml/tree.h>
 #include "util.h"
 //#define CONFIG_PID_FILE_FORMAT "/var/run/quectel-CM-%s.pid" //for example /var/run/quectel-CM-wwan0.pid
 
+char *apnConfigfile = NULL;
 int debug_qmi = 0;
 int qmidevice_control_fd[2];
 static int signal_control_fd[2];
@@ -31,6 +33,67 @@ extern int ql_ifconfig(int argc, char *argv[]);
 extern int ql_get_netcard_driver_info(const char*);
 extern int ql_capture_usbmon_log(PROFILE_T *profile, const char *log_path);
 extern void ql_stop_usbmon_log(PROFILE_T *profile);
+
+
+// get apn config from apn-conf.xml file
+void parseApn(xmlNode *node, const char *searchMcc, const char *searchMnc, PROFILE_T *profile) {
+    char *mcc = NULL;
+    char *mnc = NULL;
+    char *apn = NULL;
+    char *user = NULL;
+    char *password = NULL;
+
+    xmlAttr *attribute = node->properties;
+    while (attribute) {
+        if (strcmp((const char *)attribute->name, "mcc") == 0) {
+            mcc = (char *)attribute->children->content;
+        } else if (strcmp((const char *)attribute->name, "mnc") == 0) {
+            mnc = (char *)attribute->children->content;
+        } else if (strcmp((const char *)attribute->name, "apn") == 0) {
+            apn = (char *)attribute->children->content;
+        } else if (strcmp((const char *)attribute->name, "user") == 0) {
+            user = (char *)attribute->children->content;
+        } else if (strcmp((const char *)attribute->name, "password") == 0) {
+            password = (char *)attribute->children->content;
+        }
+        attribute = attribute->next;
+    }
+
+    if (mcc && mnc && strcmp(mcc, searchMcc) == 0 && strcmp(mnc, searchMnc) == 0) {
+        if (strstr(apn, "mms") == NULL) {
+          if (profile) {
+            if (apn) {
+                profile->apn = strdup(apn);
+            }
+            if (user) profile->user = strdup(user);
+            if (password) profile->password = strdup(password);
+          }
+            //printf("APN: %s\n", apn ? apn : "N/A");
+            //printf("User: %s\n", user ? user : "N/A");
+            //printf("Password: %s\n", password ? password : "N/A");
+        }
+    }
+}
+
+void parseXml(const char *filename, const char *searchMcc, const char *searchMnc, PROFILE_T *profile) {
+    xmlDoc *doc = xmlReadFile(filename, NULL, 0);
+    if (doc == NULL) {
+        printf("Could not parse the XML file\n");
+        return;
+    }
+
+    xmlNode *rootElement = xmlDocGetRootElement(doc);
+    xmlNode *currentNode = NULL;
+
+    for (currentNode = rootElement->children; currentNode; currentNode = currentNode->next) {
+        if (currentNode->type == XML_ELEMENT_NODE && strcmp((const char *)currentNode->name, "apn") == 0) {
+            parseApn(currentNode, searchMcc, searchMnc, profile);
+        }
+    }
+
+    xmlFreeDoc(doc);
+    xmlCleanupParser();
+}
 
 //UINT ifc_get_addr(const char *ifname);
 static int s_link = -1;
@@ -241,6 +304,7 @@ static pthread_t gQmiThreadID = 0;
 static int usage(const char *progname) {
     dbg_time("Usage: %s [options]", progname);
     dbg_time("-s [apn [user password auth]]          Set apn/user/password/auth get from your network provider. auth: 1~pap, 2~chap");
+    dbg_time("-c apn-config-file                     Set apns-conf.xml");
     dbg_time("-p pincode                             Verify sim card pin if sim card is locked");
     dbg_time("-p [quectel-][qmi|mbim]-proxy          Request to use proxy");
     dbg_time("-f logfilename                         Save log message of this program to file");
@@ -265,7 +329,7 @@ int qmi_main(PROFILE_T *profile)
     int triger_event = 0;
     int signo;
 #ifdef CONFIG_SIM
-    SIM_Status SIMStatus;
+    SIM_Status SIMStatus = SIM_NOT_READY;
 #endif
     UCHAR PSAttachedState = 0;
     UCHAR  IPv4ConnectionStatus = QWDS_PKT_DATA_UNKNOW;
@@ -274,6 +338,10 @@ int qmi_main(PROFILE_T *profile)
     unsigned long SetupCallAllowTime = clock_msec();
     int qmierr = 0;
     const struct request_ops *request_ops = profile ->request_ops;
+    
+    char *pp_imsi = NULL;
+    char mcc_tmp[4] = {'\0'};
+    char mnc_tmp[3] = {'\0'};
 
     /* signal trigger quit event */
     signal(SIGINT, ql_sigaction);
@@ -337,9 +405,10 @@ __main_loop:
     if (request_ops->requestGetSIMStatus) {
         qmierr = request_ops->requestGetSIMStatus(&SIMStatus);
 
-        while (qmierr == QMI_ERR_OP_DEVICE_UNSUPPORTED) {
+        while (qmierr == QMI_ERR_OP_DEVICE_UNSUPPORTED /*|| (SIMStatus != SIM_READY)*/) {
             sleep(1);
             qmierr = request_ops->requestGetSIMStatus(&SIMStatus);
+            dbg_time("[%s] SIMStatus %d", __func__, SIMStatus);
         }
 
         if ((SIMStatus == SIM_PIN) && profile->pincode && request_ops->requestEnterSimPin) {
@@ -352,7 +421,17 @@ __main_loop:
             request_ops->requestGetICCID();
 
         if (request_ops->requestGetIMSI)
-            request_ops->requestGetIMSI();
+            request_ops->requestGetIMSI(&pp_imsi);
+        dbg_time("[%s] IMSI %s", __func__, pp_imsi);
+        if (pp_imsi && !(profile->apn || profile->user || profile->password) && apnConfigfile) {
+          strncpy(mcc_tmp, pp_imsi, 3);
+          strncpy(mnc_tmp, pp_imsi + 3, 2);
+          parseXml(apnConfigfile, mcc_tmp, mnc_tmp, profile);
+          dbg_time("[%s] APN is %s", __func__, profile->apn);
+        }
+        if (pp_imsi) {
+          free(pp_imsi);
+        }
     }
 
     if (request_ops->requestSetProfile && (profile->apn || profile->user || profile->password)) {
@@ -718,6 +797,14 @@ int main(int argc, char *argv[])
             case 'n':
                 if (has_more_argv())
                     profile.pdp = argv[opt++][0] - '0';
+            break;
+
+            case 'c':
+                if (has_more_argv())
+                {
+                  apnConfigfile = argv[opt++];
+                  dbg_time("[%s]: apnConfigfile is %s", __func__, apnConfigfile);
+                }
             break;
 
             case 'f':

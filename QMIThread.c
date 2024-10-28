@@ -74,8 +74,9 @@ PQMI_TLV_HDR GetTLV (PQCQMUX_MSG_HDR pQMUXMsgHdr, int TLVType) {
         TLVFind++;
         //printf("GetTLV: TLVType=0x%X => TLVFind=%d, pTLVHdr->TLVType=0x%X, pTLVHdr->TLVLength=%d\n", TLVType, TLVFind, pTLVHdr->TLVType, pTLVHdr->TLVLength);
         if (TLVType > 0x1000) {
-            if ((TLVFind + 0x1000) == TLVType)
+            if ((TLVFind + 0x1000) == TLVType) {
                 return pTLVHdr;
+            }
         } else  if (pTLVHdr->TLVType == TLVType) {
             return pTLVHdr;
         }
@@ -1019,12 +1020,13 @@ static int requestGetICCID(void) { //RIL_REQUEST_GET_IMSI
     return 0;
 }
 
-static int requestGetIMSI(void) { //RIL_REQUEST_GET_IMSI
+static int requestGetIMSI(const char **pp_imsi) { //RIL_REQUEST_GET_IMSI
     PQCQMIMSG pRequest;
     PQCQMIMSG pResponse;
     PQMUX_MSG pMUXMsg;
     PQMIUIM_CONTENT pUimContent;
     int err;
+    if (pp_imsi) *pp_imsi = NULL;
 
     if (s_9x07) {
         pRequest = ComposeQMUXMsg(QMUX_TYPE_UIM, QMIUIM_READ_TRANSPARENT_REQ, UimReadTransparentIMSIReqSend, (void *)"EF_IMSI");
@@ -1045,7 +1047,7 @@ static int requestGetIMSI(void) { //RIL_REQUEST_GET_IMSI
             DeviceIMSI[j++] = ((pUimContent->content[i+1] & 0xF0) >> 0x04) + '0';
         }
         DeviceIMSI[j] = '\0';
-
+        *pp_imsi = strndup((const char *)DeviceIMSI, strlen(DeviceIMSI));
         dbg_time("%s DeviceIMSI: %s", __func__, DeviceIMSI);
     }
 
@@ -2090,6 +2092,7 @@ static void map_active_band (USHORT activeBand)
             snprintf(shell_cmd, sizeof(shell_cmd), "echo 'Mode: FDD LTE; Band: LTE BAND %d' > /tmp/lteMode", band);
         }
         system(shell_cmd);
+        dbg_time("%s band is %d", __func__, band);
         return;
     }
 }
@@ -2108,14 +2111,14 @@ static int requestGetBandCap(void)
     qmi_rsp_check_and_return();
     PQMIDMS_GET_BAND_CAP ptlv1 = (PQMIDMS_GET_BAND_CAP)GetTLV(&pResponse->MUXMsg.QMUXMsgHdr, 0x01);
     free(pResponse);
-    dbg_time("%s BandCap: 0x%lld\n", __func__, ptlv1->BandCap);
+    dbg_time("%s BandCap: [0x%X]\n", __func__, ptlv1->BandCap);
     return 0;
 }
 
 static int requestGetRfBandInfo(void)
 {
     PQCQMIMSG pRequest;
-    PQCQMIMSG pResponse;
+    PQCQMIMSG pResponse, pResponse1, pResponse2, pResponse3;
     PQMUX_MSG pMUXMsg;
     int err;
     
@@ -2125,14 +2128,33 @@ static int requestGetRfBandInfo(void)
     qmi_rsp_check_and_return();
     PQMINASRF_BAND_INFO ptlv = (PQMINASRF_BAND_INFO)GetTLV(&pResponse->MUXMsg.QMUXMsgHdr, 0x01);
 
-    dbg_time("%s: NumInstances=%d, RadioIf=%d (%s), ActiveBand=%d, ActiveChannel=%d\n", 
-              __func__, ptlv->NumInstances, ptlv->RadioIf, Radio_If[ptlv->RadioIf], ptlv->ActiveBand, ptlv->ActiveChannel);
+    dbg_time("%s: NumInstances=%d, RadioIf=%d (%s), ActiveBand=%d, ActiveChannel=%d, TLVType=0x%02X, TLVLength=%d\n", 
+              __func__, ptlv->NumInstances, ptlv->RadioIf, Radio_If[ptlv->RadioIf], ptlv->ActiveBand, ptlv->ActiveChannel, ptlv->TLVType, ptlv->TLVLength);
     map_active_band(ptlv->ActiveBand);
     free(pResponse);
     
     requestGetBandCap();
     return 0;
 }
+
+static int requestGetSignalStrength(void)
+{
+    PQCQMIMSG pRequest;
+    PQCQMIMSG pResponse;
+    PQMUX_MSG pMUXMsg;
+    int err;
+    
+    pRequest = ComposeQMUXMsg(QMUX_TYPE_NAS, QMINAS_GET_SIGNAL_STRENGTH_REQ, NULL, NULL);
+    err = QmiThreadSendQMI(pRequest, &pResponse);
+    qmi_rsp_check_and_return();
+    PQMINAS_SIGNAL_STRENGTH ptlv = (PQMINAS_SIGNAL_STRENGTH)GetTLV(&pResponse->MUXMsg.QMUXMsgHdr, 0x02);
+
+    dbg_time("%s: SigStrength =%d, RadioIf=%d (%s)\n", 
+              __func__, ptlv->SigStrength, ptlv->RadioIf, Radio_If[ptlv->RadioIf]);
+    free(pResponse);
+    return 0;
+}
+
 static int requestGetSignalInfo(void)
 {
     PQCQMIMSG pRequest;
@@ -2140,6 +2162,7 @@ static int requestGetSignalInfo(void)
     PQMUX_MSG pMUXMsg;
     char shell_cmd[128];
     int err;
+    
 
     pRequest = ComposeQMUXMsg(QMUX_TYPE_NAS, QMINAS_GET_SIG_INFO_REQ, NULL, NULL);
     err = QmiThreadSendQMI(pRequest, &pResponse);
@@ -2226,6 +2249,8 @@ static int requestGetSignalInfo(void)
         }
     }
     free(pResponse);
+    
+    //requestGetSignalStrength();
     
     requestGetRfBandInfo();
     

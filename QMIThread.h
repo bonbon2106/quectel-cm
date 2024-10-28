@@ -292,7 +292,7 @@ struct request_ops {
     int (*requestGetIPAddress)(PROFILE_T *profile, int curIpFamily);
     int (*requestGetSignalInfo)(void);
     int (*requestGetICCID)(void);
-    int (*requestGetIMSI)(void);
+    int (*requestGetIMSI)(const char **pp_imsi);
     int (*requestGetIMEI)(void);
 };
 extern const struct request_ops qmi_request_ops;

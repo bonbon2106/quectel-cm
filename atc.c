@@ -654,7 +654,7 @@ _error:
     return err;
 }
 
-static int requestGetIMSI(void) {
+static int requestGetIMSI(const char **pp_imsi) {
     int err;
     ATResponse *p_response = NULL;
     char *imsi;

@@ -20,19 +20,19 @@ QL_CM_DHCP=udhcpc_netlink.c
 QL_CM_DHCP+=${LIBMNL}
 endif
 
-CFLAGS+=-Wall -O1
+CFLAGS+=-Wall -O1 -I./libxml2/include/libxml2
 
 release: clean qmi-proxy mbim-proxy
-	$(CC) ${CFLAGS} -s ${QL_CM_SRC} ${QL_CM_DHCP} -o quectel-CM -lpthread -ldl -lrt
+	$(CC) ${CFLAGS} -s ${QL_CM_SRC} ${QL_CM_DHCP} -o quectel-CM -lpthread -ldl -lrt -lxml2 -L./libxml2/lib -L./zlib/lib -lz -L./xz/lib -llzma
 
 debug: clean
-	$(CC) ${CFLAGS} -g -DCM_DEBUG ${QL_CM_SRC} ${QL_CM_DHCP} -o quectel-CM -lpthread -ldl -lrt
+	$(CC) ${CFLAGS} -g -DCM_DEBUG ${QL_CM_SRC} ${QL_CM_DHCP} -o quectel-CM -lpthread -ldl -lrt -lxml2 -L./libxml2/lib -L./zlib/lib -lz -L./xz/lib -llzma
 
 qmi-proxy:
-	$(CC) ${CFLAGS} -s quectel-qmi-proxy.c  -o quectel-qmi-proxy -lpthread -ldl -lrt
+	$(CC) ${CFLAGS} -s quectel-qmi-proxy.c  -o quectel-qmi-proxy -lpthread -ldl -lrt -lxml2 -L./libxml2/lib -L./zlib/lib -lz -L./xz/lib -llzma
 
 mbim-proxy:
-	$(CC) ${CFLAGS} -s quectel-mbim-proxy.c  -o quectel-mbim-proxy -lpthread -ldl -lrt
-
+	$(CC) ${CFLAGS} -s quectel-mbim-proxy.c  -o quectel-mbim-proxy -lpthread -ldl -lrt -lxml2 -L./libxml2/lib -L ./zlib/lib -lz -L./xz/lib -llzma
+ 
 clean:
 	rm -rf *.o libmnl/*.o quectel-CM quectel-qmi-proxy quectel-mbim-proxy
