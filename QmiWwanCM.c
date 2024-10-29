@@ -371,7 +371,7 @@ static void * QmiWwanThread(void *pData) {
                 if (fd == cdc_wdm_fd) {
                 } else {
                 }
-                if (revents & (POLLHUP | POLLNVAL)) //EC20 bug, Can get POLLERR
+                if (revents & (POLLHUP | POLLNVAL) || (access("/tmp/ltePowerOff", R_OK) == 0)) //EC20 bug, Can get POLLERR
                     goto __QmiWwanThread_quit;
             }
 
